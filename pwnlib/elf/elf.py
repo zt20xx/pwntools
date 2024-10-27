@@ -1258,6 +1258,23 @@ class ELF(ELFFile):
                     break
                 yield (addr + offset + load_address_fixup)
                 offset += 1
+        if not segments:
+            for section in super().iter_sections():
+                if section.name==".text":
+                    addr = section['sh_addr']
+                    memsz = section['sh_size']
+                    filesz = section['sh_size']
+                    zeroed = memsz - filesz
+                    offset = section['sh_offset']
+                    data = self.mmap[offset:offset + filesz]
+                    data += b'\x00'
+                    offset = 0
+                    while True:
+                        offset = data.find(needle, offset)
+                        if offset == -1:
+                            break
+                        yield (addr + offset + load_address_fixup)
+                        offset += 1
 
     def offset_to_vaddr(self, offset):
         """offset_to_vaddr(offset) -> int

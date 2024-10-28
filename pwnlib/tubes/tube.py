@@ -21,6 +21,8 @@ from pwnlib.context import context
 from pwnlib.log import Logger
 from pwnlib.timeout import Timeout
 from pwnlib.tubes.buffer import Buffer
+from pwnlib.util import fiddling
+from pwnlib.util import iters
 from pwnlib.util import misc
 from pwnlib.util import packing
 
@@ -1076,6 +1078,131 @@ class tube(Timeout, Logger):
                 self.maybe_hexdump(cached_data, level=logging.DEBUG)
         with context.local(log_level='debug'):
             return cached_data + self.clean(timeout)
+
+    def upload_manually(self, data, target_path = './payload', prompt = b'$', chunk_size = 0x200, chmod_flags = 'u+x', compression='auto', end_marker = 'PWNTOOLS_DONE'):
+        """upload_manually(data, target_path = './payload', prompt = b'$', chunk_size = 0x200, chmod_flags = 'u+x', compression='auto', end_marker = 'PWNTOOLS_DONE')
+
+        Upload a file manually using base64 encoding and compression.
+        This can be used when the tube is connected to a shell.
+
+        The file is uploaded in base64-encoded chunks by appending to a file
+        and then decompressing it:
+
+        ```
+        loop:
+            echo <chunk> | base64 -d >> <target_path>.<compression>
+        <compression> -d -f <target_path>.<compression>
+        chmod <chmod_flags> <target_path>
+        ```
+
+        It is assumed that a `base64` command is available on the target system.
+        When ``compression`` is ``auto`` the best compression utility available
+        between ``gzip`` and ``xz`` is chosen with a fallback to uncompressed
+        upload.
+
+        Arguments:
+
+            data(bytes): The data to upload.
+            target_path(str): The path to upload the data to.
+            prompt(bytes): The shell prompt to wait for.
+            chunk_size(int): The size of each chunk to upload.
+            chmod_flags(str): The flags to use with chmod. ``""`` to ignore.
+            compression(str): The compression to use. ``auto`` to automatically choose the best compression or ``gzip`` or ``xz``.	
+            end_marker(str): The marker to use to detect the end of the output. Only used when prompt is not set.
+
+        Examples:
+
+        >>> l = listen()
+        >>> l.spawn_process('/bin/sh')
+        >>> r = remote('127.0.0.1', l.lport)
+        >>> r.upload_manually(b'some\\xca\\xfedata\\n', prompt=b'', chmod_flags='')
+        >>> r.sendline(b'cat ./payload')
+        >>> r.recvline()
+        b'some\\xca\\xfedata\\n'
+
+        >>> r.upload_manually(cyclic(0x1000), target_path='./cyclic_pattern', prompt=b'', chunk_size=0x10, compression='gzip')
+        >>> r.sendline(b'sha256sum ./cyclic_pattern')
+        >>> r.recvlineS(keepends=False).startswith(sha256sumhex(cyclic(0x1000)))
+        True
+
+        >>> blob = ELF.from_assembly(shellcraft.echo('Hello world!\\n') + shellcraft.exit(0))
+        >>> r.upload_manually(blob.data, prompt=b'')
+        >>> r.sendline(b'./payload')
+        >>> r.recvline()
+        b'Hello world!\\n'
+        >>> r.close()
+        >>> l.close()
+        """
+        echo_end = ""
+        if not prompt:
+            echo_end = "; echo {}".format(end_marker)
+            end_markerb = end_marker.encode()
+        else:
+            end_markerb = prompt
+
+        # Detect available compression utility, fallback to uncompressed upload.
+        compression_mode = None
+        possible_compression = ['gzip']
+        if six.PY3:
+            possible_compression.insert(0, 'xz')
+        if not prompt:
+            self.sendline("echo {}".format(end_marker).encode())
+        if compression == 'auto':
+            for utility in possible_compression:
+                self.sendlineafter(end_markerb, "command -v {} && echo YEP || echo NOPE{}".format(utility, echo_end).encode())
+                result = self.recvuntil([b'YEP', b'NOPE'])
+                if b'YEP' in result:
+                    compression_mode = utility
+                    break
+        elif compression in possible_compression:
+            compression_mode = compression
+        else:
+            self.error('Invalid compression mode: %s, has to be one of %s', compression, possible_compression)
+
+        self.debug('Manually uploading using compression mode: %s', compression_mode)
+
+        compressed_data = b''
+        if compression_mode == 'xz':
+            import lzma
+            compressed_data = lzma.compress(data, format=lzma.FORMAT_XZ, preset=9)
+            compressed_path = target_path + '.xz'
+        elif compression_mode == 'gzip':
+            import gzip
+            from six import BytesIO
+            f = BytesIO()
+            with gzip.GzipFile(fileobj=f, mode='wb', compresslevel=9) as g:
+                g.write(data)
+            compressed_data = f.getvalue()
+            compressed_path = target_path + '.gz'
+        else:
+            compressed_path = target_path
+
+        # Don't compress if it doesn't reduce the size.
+        if len(compressed_data) >= len(data):
+            compression_mode = None
+            compressed_path = target_path
+        else:
+            data = compressed_data
+
+        # Upload data in `chunk_size` chunks. Assume base64 is available.
+        with self.progress('Uploading payload') as p:
+            for idx, chunk in enumerate(iters.group(chunk_size, data)):
+                if None in chunk:
+                    chunk = chunk[:chunk.index(None)]
+                if idx == 0:
+                    self.sendlineafter(end_markerb, "echo {} | base64 -d > {}{}".format(fiddling.b64e(bytearray(chunk)), compressed_path, echo_end).encode())
+                else:
+                    self.sendlineafter(end_markerb, "echo {} | base64 -d >> {}{}".format(fiddling.b64e(bytearray(chunk)), compressed_path, echo_end).encode())
+                p.status('{}/{} {}'.format(idx+1, len(data)//chunk_size+1, misc.size(idx*chunk_size + len(chunk))))
+            p.success(misc.size(len(data)))
+
+        # Decompress the file and set the permissions.
+        if compression_mode is not None:
+            self.sendlineafter(end_markerb, '{} -d -f {}{}'.format(compression_mode, compressed_path, echo_end).encode())
+        if chmod_flags:
+            self.sendlineafter(end_markerb, 'chmod {} {}{}'.format(chmod_flags, target_path, echo_end).encode())
+        if not prompt:
+            self.recvuntil(end_markerb + b'\n')
 
     def connect_input(self, other):
         """connect_input(other)

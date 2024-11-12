@@ -52,7 +52,7 @@ from collections import namedtuple, defaultdict
 from elftools.elf.constants import P_FLAGS
 from elftools.elf.constants import SHN_INDICES
 from elftools.elf.descriptions import describe_e_type
-from elftools.elf.elffile import ELFFile
+from elftools.elf.elffile import ELFFile, PAGESIZE
 from elftools.elf.enums import ENUM_GNU_PROPERTY_X86_FEATURE_1_FLAGS
 from elftools.elf.gnuversions import GNUVerDefSection
 from elftools.elf.relocation import RelocationSection, RelrRelocationSection
@@ -1259,12 +1259,26 @@ class ELF(ELFFile):
                 yield (addr + offset + load_address_fixup)
                 offset += 1
         if not segments:
+            if writable:
+                ko_check_segments = ".data"
+                text_filesz=0
+                rodata_filesz=0
+                for section in super().iter_sections():
+                    if section.name == ".text":
+                        text_filesz = section['sh_size']
+                    elif len(section.name)>=len(".rodata") and section.name[:len(".rodata")]==".rodata":
+                        rodata_filesz += section['sh_size']
+                addr = (text_filesz//PAGESIZE + 1 + rodata_filesz//PAGESIZE + 1)*PAGESIZE
+            elif executable:
+                ko_check_segments = ".text"
+                addr = 0
+            else:
+                # There may be other sections before .rodata, such as .note.gnu.build-id or .note.Linux
+                ko_check_segments = ".text"
+                addr = 0
             for section in super().iter_sections():
-                if section.name==".text":
-                    addr = section['sh_addr']
-                    memsz = section['sh_size']
+                if section.name == ko_check_segments:
                     filesz = section['sh_size']
-                    zeroed = memsz - filesz
                     offset = section['sh_offset']
                     data = self.mmap[offset:offset + filesz]
                     data += b'\x00'

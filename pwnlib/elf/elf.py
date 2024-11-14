@@ -1260,24 +1260,14 @@ class ELF(ELFFile):
                 offset += 1
         if not segments:
             if writable:
-                ko_check_segments = ".data"
-                text_filesz=0
-                rodata_filesz=0
-                for section in super().iter_sections():
-                    if section.name == ".text":
-                        text_filesz = section['sh_size']
-                    elif len(section.name)>=len(".rodata") and section.name[:len(".rodata")]==".rodata":
-                        rodata_filesz += section['sh_size']
-                addr = (text_filesz//PAGESIZE + 1 + rodata_filesz//PAGESIZE + 1)*PAGESIZE
+                ko_check_segments = [".data"]
             elif executable:
-                ko_check_segments = ".text"
-                addr = 0
+                ko_check_segments = [".text"]
             else:
                 # There may be other sections before .rodata, such as .note.gnu.build-id or .note.Linux
-                ko_check_segments = ".text"
-                addr = 0
+                ko_check_segments = [".text",".data"]
             for section in super().iter_sections():
-                if section.name == ko_check_segments:
+                if section.name in ko_check_segments:
                     filesz = section['sh_size']
                     offset = section['sh_offset']
                     data = self.mmap[offset:offset + filesz]
@@ -1287,6 +1277,18 @@ class ELF(ELFFile):
                         offset = data.find(needle, offset)
                         if offset == -1:
                             break
+                        if section.name == ".data":
+                            text_filesz=0
+                            rodata_filesz=0
+                            for section in super().iter_sections():
+                                if section.name == ".text":
+                                    text_filesz = section['sh_size']
+                                elif len(section.name)>=len(".rodata") and section.name[:len(".rodata")]==".rodata":
+                                    rodata_filesz += section['sh_size']
+                            addr = (text_filesz//PAGESIZE + 1 + rodata_filesz//PAGESIZE + 1)*PAGESIZE
+                        elif section.name == ".text":
+                            addr = 0
+
                         yield (addr + offset + load_address_fixup)
                         offset += 1
 

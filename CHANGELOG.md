@@ -88,6 +88,7 @@ The table below shows which release corresponds to each branch, and what date th
 - [#2410][2410] Add `tube.upload_manually` to upload files in chunks
 - [#2502][2502] Fix loading ELF files without valid .dynamic section
 - [#2476][2476] Deprecate 'keepends' argument in favor of 'drop' in `tube.recvline*`
+- [#2364][2364] Deprecate direct commandline scripts invocation and exclude nonsense ones
 
 [2471]: https://github.com/Gallopsled/pwntools/pull/2471
 [2358]: https://github.com/Gallopsled/pwntools/pull/2358
@@ -104,6 +105,7 @@ The table below shows which release corresponds to each branch, and what date th
 [2410]: https://github.com/Gallopsled/pwntools/pull/2410
 [2502]: https://github.com/Gallopsled/pwntools/pull/2502
 [2476]: https://github.com/Gallopsled/pwntools/pull/2476
+[2364]: https://github.com/Gallopsled/pwntools/pull/2364
 
 ## 4.14.0 (`beta`)
 

@@ -72,7 +72,7 @@ The table below shows which release corresponds to each branch, and what date th
 | [2.2.0](#220)    |          | Jan 5, 2015
 
 ## 4.15.0 (`dev`)
-
+- [#2508][2508] Ignore a warning when compiling with asm 
 - [#2471][2471] Properly close spawned kitty window
 - [#2358][2358] Cache output of `asm()`
 - [#2457][2457] Catch exception of non-ELF files in checksec.
@@ -90,6 +90,7 @@ The table below shows which release corresponds to each branch, and what date th
 - [#2476][2476] Deprecate 'keepends' argument in favor of 'drop' in `tube.recvline*`
 - [#2364][2364] Deprecate direct commandline scripts invocation and exclude nonsense ones
 
+[2508]: https://github.com/Gallopsled/pwntools/pull/2508
 [2471]: https://github.com/Gallopsled/pwntools/pull/2471
 [2358]: https://github.com/Gallopsled/pwntools/pull/2358
 [2457]: https://github.com/Gallopsled/pwntools/pull/2457

@@ -294,6 +294,15 @@ def search_by_hash(search_target, search_type='build_id', unstrip=True, offline_
     return cache
 
 def _search_debuginfo_by_hash(base_url, hex_encoded_id):
+    """
+    Given a hex-encoded build_id, attempt to download a matching debuginfo from the debuginfod server.
+
+    >>> debuginfo_file = _search_debuginfo_by_hash(DEBUGINFOD_SERVERS[0], 'd1704d25fbbb72fa95d517b883131828c0883fe9')
+    >>> debuginfo_file is not None
+    True
+    >>> 'main_arena' in ELF(debuginfo_file).symbols
+    True
+    """
     # Deferred import because it's slow
     import requests
     from six.moves import urllib
@@ -766,12 +775,12 @@ def search_by_libs_id(libs_id, unstrip=True, offline_only=False):
 
     Arguments:
         libs_id(str):
-            Libs ID (e.g. 'libc6_...') of the library
+            Libs ID (e.g. ``'libc6_...'``) of the library
         unstrip(bool):
             Try to fetch debug info for the libc and apply it to the downloaded file.
         offline_only(bool):
-            When pass `offline_only=True`, restricts search mode to offline sources only,
-            disable online lookup. Defaults to `False`, and enable both offline and online providers.
+            When pass ``offline_only=True``, restricts search mode to offline sources only,
+            disable online lookup. Defaults to :const:`False`, and enable both offline and online providers.
 
     Returns:
         Path to the downloaded library on disk, or :const:`None`.
